@@ -1,27 +1,21 @@
 ﻿using System;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 
 namespace EmployeeAudit
 {
     public static class InitDatabase
     {
-        // private static readonly string Password = Environment.GetEnvironmentVariable("AnalyticsPassword") 
-        //                                           ?? throw new InvalidOperationException("You must set the AnalyticsPassword environment variable");
-        // private static readonly string Database = Environment.GetEnvironmentVariable("AnalyticsDatabase") 
-        //                                           ?? throw new InvalidOperationException("You must set the AnalyticsDatabase environment variable");
-        // private static readonly string Port = Environment.GetEnvironmentVariable("AnalyticsPort") 
-        //                                       ?? throw new InvalidOperationException("You must set the AnalyticsPort environment variable");
-        // private static readonly string SchemaLocation = Environment.GetEnvironmentVariable("AnalyticsSchemaLocation") 
-        //                                       ?? throw new InvalidOperationException("You must set the AnalyticsSchemaLocation environment variable");
-        private const string Password = "guest";
-        private const string Port = "7777";
-        private const string Database = "analyticsproject";
-        private const string SchemaLocation = @"C:\Users\vnol0096\Desktop\visma-tech-test-complex-domain-app-main\Test\DatabaseSchema\DatabaseSchema.csproj";
+        private static string _connectionString = "";
+        private static string _database = "";
 
-        public static async Task SetupDatabase()
+        public static async Task SetupDatabase(IConfigurationRoot config, string projectDirectory)
         {
+            _connectionString = config.GetSection("ConnectionStrings")["DefaultConnection"];
+            _database = config.GetValue<string>("Database");
+            
             Console.WriteLine("Waiting for database to start");
             await TestConnection();
 
@@ -31,8 +25,7 @@ namespace EmployeeAudit
                 Console.WriteLine("Adding new database");
             }
             
-            // Console.WriteLine("Adding database schema");
-            // await ImportSchema();
+            await ImportSchema(projectDirectory, config);
         } 
         
         private static async Task TestConnection()
@@ -43,7 +36,7 @@ namespace EmployeeAudit
             {
                 try
                 {
-                    await using var connection = new NpgsqlConnection($"Server=localhost; User ID=postgres; Password={Password}; Port={Port};");
+                    await using var connection = new NpgsqlConnection(_connectionString);
                     await connection.OpenAsync();
                     Console.WriteLine("Connection attempt succeeded");
 
@@ -62,36 +55,44 @@ namespace EmployeeAudit
         
         private static async Task CreateDatabase()
         {
-            await using var connection = new NpgsqlConnection($"Server=localhost;User ID=postgres; Password={Password}; Port={Port};");
+            await using var connection = new NpgsqlConnection(_connectionString);
             await connection.OpenAsync();
 
             var command = connection.CreateCommand();
-            command.CommandText = $"CREATE DATABASE {Database}";
+            command.CommandText = $"CREATE DATABASE {_database}";
 
             await command.ExecuteNonQueryAsync();
         }
 
-        private static async Task ImportSchema()
+        private static async Task ImportSchema(string projectDirectory, IConfiguration config)
         {
-            await using var connection = new NpgsqlConnection($"Server=localhost; User ID=postgres; Password={Password}; Port={Port}; Database={Database};");
+            await using var connection = new NpgsqlConnection(_connectionString);
             await connection.OpenAsync();
+           
+            var schemaName = config.GetValue<string>("SchemaName");
+            var tableName = config.GetValue<string>("TableName");
 
             var command = connection.CreateCommand();
-            command.CommandText = await File.ReadAllTextAsync(SchemaLocation);
 
-            await command.ExecuteNonQueryAsync();
+            var tableExistsSql = $"SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = '{schemaName}' AND table_name = '{tableName}')";
+            await using var tableExistsCommand = new NpgsqlCommand(tableExistsSql, connection);
+            var tableExists = (bool)await tableExistsCommand.ExecuteScalarAsync();
+
+            if (!tableExists)
+            {
+                Console.WriteLine("Adding database schema");
+                Console.WriteLine("Creating table");
+                command.CommandText = await File.ReadAllTextAsync($"{projectDirectory}\\Database\\dbSchema.sql");
+                await command.ExecuteNonQueryAsync();
+            }
         }
 
         private static async Task<bool> IsDatabaseExist()
         {
-            var Password = "guest";
-            var Port = "7777";
-            var Database = "analyticsproject";
-
-            await using var connection = new NpgsqlConnection($"Server=localhost; User ID=postgres; Password={Password}; Port={Port}; Database={Database};");
+            await using var connection = new NpgsqlConnection(_connectionString);
             await connection.OpenAsync();
             
-            var query = $"SELECT 1 FROM pg_database WHERE datname='{Database}'";
+            var query = $"SELECT 1 FROM pg_database WHERE datname='{_database}'";
 
             await using var command = new NpgsqlCommand(query, connection);
             

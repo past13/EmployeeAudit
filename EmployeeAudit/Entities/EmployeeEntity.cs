@@ -17,8 +17,7 @@ namespace EmployeeAudit.Entities
         [Range(1, int.MaxValue)]
         public int EmployeeId { get; private set; }
 
-        [StringLength(50, MinimumLength = 3)]
-        public string Name { get; private set; }
+        [StringLength(50, MinimumLength = 3)] public string Name { get; private set; } = string.Empty;
         
         [Range(1, int.MaxValue)]
         public int Salary { get; private set; }

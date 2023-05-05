@@ -3,6 +3,7 @@ using System.Collections.Generic;
 // using System.CommandLine;
 // using System.CommandLine.Invocation;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using EmployeeAudit.Database;
@@ -11,18 +12,18 @@ using EmployeeAudit.Entities.Enums;
 using EmployeeAudit.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 
 namespace EmployeeAudit
 {
     class Program
     {
-        private static ServiceCollection AddServices()
+        private static ServiceCollection AddServices(string connectionString)
         {
             var services = new ServiceCollection();
             services.AddTransient<IEmployeeService, EmployeeService>();
             services.AddTransient<IEntityFactory, EntityFactory>();
 
-            const string connectionString = "Server=localhost;Database=analyticsproject;User ID=postgres;Password=guest;Port=7777";
             services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(connectionString));
             
             return services;
@@ -30,9 +31,17 @@ namespace EmployeeAudit
         
         static async Task Main(string[] args)
         {
-            await InitDatabase.SetupDatabase();
+            var currentDirectory = Directory.GetCurrentDirectory();
+            var projectDirectory = Directory.GetParent(Directory.GetParent(currentDirectory).FullName).Parent?.FullName;
 
-            var services = AddServices();
+            var config = new ConfigurationBuilder()
+                .AddJsonFile($"{projectDirectory}\\appsettings.json")
+                .Build();
+            
+            var connectionString = config.GetSection("ConnectionStrings")["DefaultConnection"];
+            if (projectDirectory != null) await InitDatabase.SetupDatabase(config, projectDirectory);
+
+            var services = AddServices(connectionString);
             var serviceProvider = services.BuildServiceProvider();
             
             var factoryService = serviceProvider.GetService<IEntityFactory>();
@@ -57,11 +66,11 @@ namespace EmployeeAudit
                 return;
             }
 
-            var employee = factoryService.CreateEntity(command, dictionaryParams);
+            var employee = factoryService?.CreateEntity(command, dictionaryParams);
 
             List<ValidationResult> validationResults;
             
-            if (employee.EntityAction == EntityAction.CreateEntity)
+            if (employee is { EntityAction: EntityAction.CreateEntity })
             {
                 string[] requiredFields =
                 {
@@ -79,7 +88,7 @@ namespace EmployeeAudit
                 await employee.PutEmployee();
             }
             
-            if (employee.EntityAction == EntityAction.GetEntity)
+            if (employee is { EntityAction: EntityAction.GetEntity })
             {
                 string[] requiredFields = { nameof(EmployeeEntity.EmployeeId) };
                 validationResults = Helper.ObjectValidator<EmployeeEntity>.Validate(employee, requiredFields);

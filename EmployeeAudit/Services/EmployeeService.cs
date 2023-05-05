@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 using EmployeeAudit.Database;
@@ -23,11 +24,19 @@ namespace EmployeeAudit.Services
         
         public async Task<EmployeeViewModel> GetEmployee(int id, DateTime? date)
         {
+            if (_dbContext.Employees == null)
+            {
+                throw new InvalidOperationException();
+            };
+            
             var employeeResponse = await _dbContext.Employees
                 .OrderByDescending(item => item.ExistenceStartUtc)
-                .FirstOrDefaultAsync(e => e.EmployeeId == id) ?? new Employee(); //Todo: fix && e.ExistenceStartUtc == date
+                .FirstOrDefaultAsync(e => 
+                    e.EmployeeId == id 
+                    && date.HasValue && e.ExistenceStartUtc.Date == date.Value.Date); 
 
             return employeeResponse.MapEntityToDto();
+
         }        
         
         public async Task SaveEmployee(EmployeeEntity employee)
@@ -36,9 +45,14 @@ namespace EmployeeAudit.Services
             
             try
             {
-                var employeeResponse = _dbContext.Employees
+                if (_dbContext.Employees == null)
+                {
+                    throw new InvalidOperationException();
+                };
+                
+                var employeeResponse = await _dbContext.Employees
                     .OrderByDescending(e => e.ExistenceStartUtc)
-                    .FirstOrDefault(e => e.EmployeeId == entity.EmployeeId);
+                    .FirstOrDefaultAsync(e => e.EmployeeId == entity.EmployeeId);
                 
                 if (employeeResponse != null && employeeResponse.Salary != entity.Salary)
                 {
@@ -49,14 +63,14 @@ namespace EmployeeAudit.Services
                     copy.Salary = entity.Salary;
                     copy.ExistenceStartUtc = newDate;
 
-                    _dbContext.Employees.Add(copy);
+                    _dbContext.Employees?.Add(copy);
 
                     employeeResponse.ExistenceEndUtc = newDate;
                 }
                 else
                 {
                     entity.ExistenceStartUtc = DateTime.UtcNow;
-                    _dbContext.Employees.Add(entity);
+                    _dbContext.Employees?.Add(entity);
                 }
 
                 await _dbContext.SaveChangesAsync();

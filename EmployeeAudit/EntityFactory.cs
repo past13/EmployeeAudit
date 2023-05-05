@@ -113,7 +113,7 @@ namespace EmployeeAudit
 
         public EmployeeEntity CreateEntity(string type, Dictionary<string,string> properties)
         {
-            if (_factories.TryGetValue(type, out IEmployeeFactory factory))
+            if (_factories.TryGetValue(type, out IEmployeeFactory? factory))
             {
                 return factory.CreateEntity(properties);
             }
