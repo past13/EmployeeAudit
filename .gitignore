@@ -6,6 +6,7 @@
 *.csproj.user
 *.pdb
 *.user
+.idea/
 
 # Build results
 [Dd]ebug/
